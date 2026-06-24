@@ -3442,5 +3442,289 @@ function savePendingMutations() {
 }
 
 </script>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║      FLOATING WHATSAPP CTA — ALL 3 CAMPUSES    ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<style>
+/* ── FAB wrapper ── */
+#wa-fab{
+  position:fixed;
+  bottom:28px;
+  left:28px;
+  z-index:9999;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:10px;
+  opacity:0;
+  transform:translateY(12px);
+  transition:opacity 0.35s,transform 0.35s;
+  pointer-events:none;
+}
+#wa-fab.visible{
+  opacity:1;
+  transform:translateY(0);
+  pointer-events:auto;
+}
+
+/* ── Popup panel ── */
+#wa-panel{
+  background:var(--white);
+  border:1px solid var(--border);
+  border-radius:16px;
+  box-shadow:0 8px 40px rgba(0,0,0,0.18);
+  width:272px;
+  overflow:hidden;
+  opacity:0;
+  transform:translateY(10px) scale(0.97);
+  transform-origin:bottom left;
+  transition:opacity 0.22s ease,transform 0.22s ease;
+  pointer-events:none;
+}
+#wa-panel.open{
+  opacity:1;
+  transform:translateY(0) scale(1);
+  pointer-events:auto;
+}
+
+/* Panel header */
+#wa-panel-head{
+  background:var(--green);
+  padding:14px 16px 12px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+#wa-panel-head svg{
+  width:22px;height:22px;fill:#fff;flex-shrink:0;
+}
+#wa-panel-head-text{}
+#wa-panel-head-text strong{
+  display:block;
+  font-size:13px;font-weight:700;color:#fff;letter-spacing:0.01em;
+}
+#wa-panel-head-text span{
+  font-size:11px;color:rgba(255,255,255,0.55);
+}
+
+/* Campus rows */
+.wa-campus{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:13px 16px;
+  border-bottom:1px solid var(--border);
+  gap:10px;
+}
+.wa-campus:last-child{border-bottom:none;}
+.wa-campus-info{}
+.wa-campus-name{
+  font-size:13px;font-weight:700;color:var(--green);
+  margin:0 0 1px;line-height:1.2;
+}
+.wa-campus-ages{
+  font-size:11px;color:var(--text-muted);margin:0;
+}
+.wa-campus-link{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  background:#25D366;
+  color:#fff;
+  font-size:12px;font-weight:600;
+  padding:7px 12px;
+  border-radius:100px;
+  text-decoration:none;
+  white-space:nowrap;
+  transition:background 0.15s,transform 0.15s;
+  flex-shrink:0;
+}
+.wa-campus-link:hover{
+  background:#1ebe5d;
+  transform:scale(1.04);
+}
+.wa-campus-link svg{
+  width:14px;height:14px;fill:#fff;flex-shrink:0;
+}
+
+/* ── The FAB circle button ── */
+#wa-btn{
+  position:relative;
+  width:58px;height:58px;
+  border-radius:50%;
+  background:#25D366;
+  border:none;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 18px rgba(37,211,102,0.45);
+  transition:transform 0.2s,box-shadow 0.2s;
+  flex-shrink:0;
+}
+#wa-btn:hover{
+  transform:scale(1.08);
+  box-shadow:0 6px 24px rgba(37,211,102,0.55);
+}
+#wa-btn:active{transform:scale(0.96);}
+#wa-btn[aria-expanded="true"]{
+  background:#1ebe5d;
+  box-shadow:0 6px 24px rgba(37,211,102,0.55);
+}
+#wa-btn svg.wa-icon{width:28px;height:28px;fill:#fff;flex-shrink:0;transition:opacity 0.15s,transform 0.15s;}
+#wa-btn svg.wa-close{
+  width:22px;height:22px;fill:#fff;flex-shrink:0;
+  position:absolute;opacity:0;transform:rotate(-90deg);
+  transition:opacity 0.15s,transform 0.15s;
+}
+#wa-btn[aria-expanded="true"] svg.wa-icon{opacity:0;transform:rotate(90deg);}
+#wa-btn[aria-expanded="true"] svg.wa-close{opacity:1;transform:rotate(0deg);}
+
+/* Pulse ring */
+#wa-pulse{
+  position:absolute;inset:-6px;border-radius:50%;
+  border:2.5px solid #25D366;opacity:0;
+  animation:wa-ring 2.4s ease-out 0.8s 3;
+}
+@keyframes wa-ring{
+  0%{transform:scale(1);opacity:0.7;}
+  100%{transform:scale(1.55);opacity:0;}
+}
+
+/* Mobile */
+@media(max-width:600px){
+  #wa-fab{bottom:20px;left:14px;}
+  #wa-panel{width:calc(100vw - 28px);max-width:300px;}
+}
+</style>
+
+<!-- FAB: 3-campus WhatsApp picker -->
+<!-- Numbers: EY +856 20 5728 0925 · Primary +856 20 5538 6636 · Secondary +856 20 5538 6672 -->
+<div id="wa-fab" role="complementary" aria-label="Chat with PBIS admissions on WhatsApp">
+
+  <!-- Popup panel — shown when FAB is clicked -->
+  <div id="wa-panel" role="dialog" aria-label="Choose a campus to chat on WhatsApp" aria-hidden="true">
+
+    <div id="wa-panel-head">
+      <!-- WhatsApp icon -->
+      <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 2C8.268 2 2 8.268 2 16c0 2.47.655 4.788 1.797 6.793L2 30l7.41-1.773A13.927 13.927 0 0 0 16 30c7.732 0 14-6.268 14-14S23.732 2 16 2Zm0 25.385a11.9 11.9 0 0 1-6.066-1.655l-.435-.258-4.397 1.052 1.08-4.28-.283-.452A11.923 11.923 0 0 1 4.077 16C4.077 9.407 9.407 4.077 16 4.077S27.923 9.407 27.923 16 22.593 27.385 16 27.385Zm6.536-8.918c-.357-.18-2.115-1.043-2.443-1.163-.328-.12-.567-.18-.806.18-.238.358-.922 1.163-1.13 1.402-.208.24-.417.27-.774.09-.358-.18-1.51-.556-2.876-1.773-1.062-.947-1.78-2.117-1.988-2.474-.208-.358-.022-.55.157-.728.16-.16.357-.417.536-.626.18-.208.24-.358.358-.597.12-.238.06-.447-.03-.626-.09-.18-.806-1.942-1.104-2.658-.29-.698-.586-.603-.806-.615-.208-.01-.447-.013-.686-.013-.238 0-.626.09-.954.447-.328.358-1.253 1.224-1.253 2.986 0 1.762 1.283 3.463 1.462 3.702.18.238 2.524 3.852 6.114 5.4.854.368 1.52.588 2.04.753.857.272 1.637.234 2.254.142.688-.102 2.115-.864 2.414-1.699.3-.835.3-1.55.21-1.7-.09-.149-.328-.238-.686-.418Z"/></svg>
+      <div id="wa-panel-head-text">
+        <strong>Chat with Admissions</strong>
+        <span>Choose your campus below</span>
+      </div>
+    </div>
+
+    <!-- Early Years -->
+    <div class="wa-campus">
+      <div class="wa-campus-info">
+        <p class="wa-campus-name">Early Years</p>
+        <p class="wa-campus-ages">Nursery – Kindergarten · Ages 2–5</p>
+      </div>
+      <a class="wa-campus-link"
+         href="https://wa.me/856205728925?text=Hi%2C%20I%27d%20like%20to%20book%20a%20tour%20of%20the%20PBIS%20Early%20Years%20campus."
+         target="_blank" rel="noopener noreferrer"
+         aria-label="WhatsApp Early Years admissions">
+        <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 2C8.268 2 2 8.268 2 16c0 2.47.655 4.788 1.797 6.793L2 30l7.41-1.773A13.927 13.927 0 0 0 16 30c7.732 0 14-6.268 14-14S23.732 2 16 2Zm0 25.385a11.9 11.9 0 0 1-6.066-1.655l-.435-.258-4.397 1.052 1.08-4.28-.283-.452A11.923 11.923 0 0 1 4.077 16C4.077 9.407 9.407 4.077 16 4.077S27.923 9.407 27.923 16 22.593 27.385 16 27.385Zm6.536-8.918c-.357-.18-2.115-1.043-2.443-1.163-.328-.12-.567-.18-.806.18-.238.358-.922 1.163-1.13 1.402-.208.24-.417.27-.774.09-.358-.18-1.51-.556-2.876-1.773-1.062-.947-1.78-2.117-1.988-2.474-.208-.358-.022-.55.157-.728.16-.16.357-.417.536-.626.18-.208.24-.358.358-.597.12-.238.06-.447-.03-.626-.09-.18-.806-1.942-1.104-2.658-.29-.698-.586-.603-.806-.615-.208-.01-.447-.013-.686-.013-.238 0-.626.09-.954.447-.328.358-1.253 1.224-1.253 2.986 0 1.762 1.283 3.463 1.462 3.702.18.238 2.524 3.852 6.114 5.4.854.368 1.52.588 2.04.753.857.272 1.637.234 2.254.142.688-.102 2.115-.864 2.414-1.699.3-.835.3-1.55.21-1.7-.09-.149-.328-.238-.686-.418Z"/></svg>
+        Chat
+      </a>
+    </div>
+
+    <!-- Primary -->
+    <div class="wa-campus">
+      <div class="wa-campus-info">
+        <p class="wa-campus-name">Primary</p>
+        <p class="wa-campus-ages">Year 1 – Year 6 · Ages 5–11</p>
+      </div>
+      <a class="wa-campus-link"
+         href="https://wa.me/8562055386636?text=Hi%2C%20I%27d%20like%20to%20book%20a%20tour%20of%20the%20PBIS%20Primary%20campus."
+         target="_blank" rel="noopener noreferrer"
+         aria-label="WhatsApp Primary admissions">
+        <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 2C8.268 2 2 8.268 2 16c0 2.47.655 4.788 1.797 6.793L2 30l7.41-1.773A13.927 13.927 0 0 0 16 30c7.732 0 14-6.268 14-14S23.732 2 16 2Zm0 25.385a11.9 11.9 0 0 1-6.066-1.655l-.435-.258-4.397 1.052 1.08-4.28-.283-.452A11.923 11.923 0 0 1 4.077 16C4.077 9.407 9.407 4.077 16 4.077S27.923 9.407 27.923 16 22.593 27.385 16 27.385Zm6.536-8.918c-.357-.18-2.115-1.043-2.443-1.163-.328-.12-.567-.18-.806.18-.238.358-.922 1.163-1.13 1.402-.208.24-.417.27-.774.09-.358-.18-1.51-.556-2.876-1.773-1.062-.947-1.78-2.117-1.988-2.474-.208-.358-.022-.55.157-.728.16-.16.357-.417.536-.626.18-.208.24-.358.358-.597.12-.238.06-.447-.03-.626-.09-.18-.806-1.942-1.104-2.658-.29-.698-.586-.603-.806-.615-.208-.01-.447-.013-.686-.013-.238 0-.626.09-.954.447-.328.358-1.253 1.224-1.253 2.986 0 1.762 1.283 3.463 1.462 3.702.18.238 2.524 3.852 6.114 5.4.854.368 1.52.588 2.04.753.857.272 1.637.234 2.254.142.688-.102 2.115-.864 2.414-1.699.3-.835.3-1.55.21-1.7-.09-.149-.328-.238-.686-.418Z"/></svg>
+        Chat
+      </a>
+    </div>
+
+    <!-- Secondary -->
+    <div class="wa-campus">
+      <div class="wa-campus-info">
+        <p class="wa-campus-name">Secondary</p>
+        <p class="wa-campus-ages">Year 7 – Year 13 · Ages 11–18</p>
+      </div>
+      <a class="wa-campus-link"
+         href="https://wa.me/8562055386672?text=Hi%2C%20I%27d%20like%20to%20book%20a%20tour%20of%20the%20PBIS%20Secondary%20campus."
+         target="_blank" rel="noopener noreferrer"
+         aria-label="WhatsApp Secondary admissions">
+        <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 2C8.268 2 2 8.268 2 16c0 2.47.655 4.788 1.797 6.793L2 30l7.41-1.773A13.927 13.927 0 0 0 16 30c7.732 0 14-6.268 14-14S23.732 2 16 2Zm0 25.385a11.9 11.9 0 0 1-6.066-1.655l-.435-.258-4.397 1.052 1.08-4.28-.283-.452A11.923 11.923 0 0 1 4.077 16C4.077 9.407 9.407 4.077 16 4.077S27.923 9.407 27.923 16 22.593 27.385 16 27.385Zm6.536-8.918c-.357-.18-2.115-1.043-2.443-1.163-.328-.12-.567-.18-.806.18-.238.358-.922 1.163-1.13 1.402-.208.24-.417.27-.774.09-.358-.18-1.51-.556-2.876-1.773-1.062-.947-1.78-2.117-1.988-2.474-.208-.358-.022-.55.157-.728.16-.16.357-.417.536-.626.18-.208.24-.358.358-.597.12-.238.06-.447-.03-.626-.09-.18-.806-1.942-1.104-2.658-.29-.698-.586-.603-.806-.615-.208-.01-.447-.013-.686-.013-.238 0-.626.09-.954.447-.328.358-1.253 1.224-1.253 2.986 0 1.762 1.283 3.463 1.462 3.702.18.238 2.524 3.852 6.114 5.4.854.368 1.52.588 2.04.753.857.272 1.637.234 2.254.142.688-.102 2.115-.864 2.414-1.699.3-.835.3-1.55.21-1.7-.09-.149-.328-.238-.686-.418Z"/></svg>
+        Chat
+      </a>
+    </div>
+
+  </div><!-- /wa-panel -->
+
+  <!-- FAB circle button -->
+  <button id="wa-btn" aria-expanded="false" aria-controls="wa-panel"
+          aria-label="Open WhatsApp campus contacts">
+    <span id="wa-pulse"></span>
+    <!-- WhatsApp icon (shown when closed) -->
+    <svg class="wa-icon" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 2C8.268 2 2 8.268 2 16c0 2.47.655 4.788 1.797 6.793L2 30l7.41-1.773A13.927 13.927 0 0 0 16 30c7.732 0 14-6.268 14-14S23.732 2 16 2Zm0 25.385a11.9 11.9 0 0 1-6.066-1.655l-.435-.258-4.397 1.052 1.08-4.28-.283-.452A11.923 11.923 0 0 1 4.077 16C4.077 9.407 9.407 4.077 16 4.077S27.923 9.407 27.923 16 22.593 27.385 16 27.385Zm6.536-8.918c-.357-.18-2.115-1.043-2.443-1.163-.328-.12-.567-.18-.806.18-.238.358-.922 1.163-1.13 1.402-.208.24-.417.27-.774.09-.358-.18-1.51-.556-2.876-1.773-1.062-.947-1.78-2.117-1.988-2.474-.208-.358-.022-.55.157-.728.16-.16.357-.417.536-.626.18-.208.24-.358.358-.597.12-.238.06-.447-.03-.626-.09-.18-.806-1.942-1.104-2.658-.29-.698-.586-.603-.806-.615-.208-.01-.447-.013-.686-.013-.238 0-.626.09-.954.447-.328.358-1.253 1.224-1.253 2.986 0 1.762 1.283 3.463 1.462 3.702.18.238 2.524 3.852 6.114 5.4.854.368 1.52.588 2.04.753.857.272 1.637.234 2.254.142.688-.102 2.115-.864 2.414-1.699.3-.835.3-1.55.21-1.7-.09-.149-.328-.238-.686-.418Z"/></svg>
+    <!-- Close X (shown when open) -->
+    <svg class="wa-close" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>
+  </button>
+
+</div><!-- /wa-fab -->
+
+<script>
+(function(){
+  var fab    = document.getElementById('wa-fab');
+  var btn    = document.getElementById('wa-btn');
+  var panel  = document.getElementById('wa-panel');
+  var shown  = false;
+  var open   = false;
+
+  /* scroll visibility */
+  function checkScroll(){
+    if(window.scrollY > 300 && !shown){
+      shown = true;
+      fab.classList.add('visible');
+    } else if(window.scrollY <= 300 && shown){
+      shown = false;
+      fab.classList.remove('visible');
+      closePanel();
+    }
+  }
+  window.addEventListener('scroll', checkScroll, {passive:true});
+  checkScroll();
+
+  /* toggle panel */
+  function openPanel(){
+    open = true;
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden','false');
+    btn.setAttribute('aria-expanded','true');
+    btn.setAttribute('aria-label','Close WhatsApp contacts');
+  }
+  function closePanel(){
+    open = false;
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden','true');
+    btn.setAttribute('aria-expanded','false');
+    btn.setAttribute('aria-label','Open WhatsApp campus contacts');
+  }
+
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    open ? closePanel() : openPanel();
+  });
+
+  /* close on outside click */
+  document.addEventListener('click', function(e){
+    if(open && !fab.contains(e.target)) closePanel();
+  });
+
+  /* close on Escape */
+  document.addEventListener('keydown', function(e){
+    if(open && (e.key === 'Escape' || e.key === 'Esc')) closePanel();
+  });
+})();
+</script>
 </body>
 </html>
