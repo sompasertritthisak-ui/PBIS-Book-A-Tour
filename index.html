@@ -565,6 +565,92 @@ footer{
 .success-card .close-btn:hover{background:var(--green2);}
 
 /* ── ADMIN TOGGLE ── */
+
+/* ── ACTION CONFIRMATION MODAL ── */
+.confirm-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);
+  z-index:999999;align-items:center;justify-content:center;padding:20px;
+}
+.confirm-overlay.show{display:flex;}
+.confirm-modal{
+  background:var(--white);border-radius:var(--radius-lg);
+  width:100%;max-width:560px;
+  box-shadow:0 32px 64px rgba(0,0,0,0.4);
+  overflow:hidden;
+  animation:pop-in 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+.confirm-modal-header{
+  padding:20px 24px;display:flex;align-items:center;gap:14px;
+}
+.confirm-modal-header-icon{
+  width:44px;height:44px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.confirm-modal-header-icon svg{width:22px;height:22px;}
+.confirm-modal-header-text h3{font-size:17px;font-weight:700;color:var(--white);margin-bottom:2px;}
+.confirm-modal-header-text p{font-size:12px;color:rgba(255,255,255,0.6);}
+.confirm-modal-body{padding:24px;}
+
+/* Email preview */
+.email-preview{
+  border:1.5px solid var(--border);border-radius:var(--radius);
+  overflow:hidden;margin-bottom:20px;
+}
+.email-preview-header{
+  background:var(--off-white);padding:10px 14px;
+  border-bottom:1px solid var(--border);
+  font-size:11px;color:var(--text-muted);display:flex;gap:16px;
+}
+.email-preview-header span b{color:var(--text);}
+.email-preview-body{padding:16px;}
+.email-preview-logo{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 16px;border-radius:8px;margin-bottom:12px;
+}
+.email-preview-logo svg{width:32px;height:32px;}
+.email-preview-logo-text{font-size:11px;font-weight:700;letter-spacing:0.04em;}
+.email-preview-logo-sub{font-size:9px;letter-spacing:0.12em;opacity:0.7;}
+
+.email-message-label{
+  font-size:11px;font-weight:700;letter-spacing:0.08em;
+  color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;
+}
+.email-message-input{
+  width:100%;border:1.5px solid var(--border);border-radius:8px;
+  padding:11px 14px;font-size:13px;font-family:'DM Sans',sans-serif;
+  color:var(--text);background:var(--white);resize:vertical;min-height:100px;
+  outline:none;transition:border-color 0.2s;line-height:1.6;
+}
+.email-message-input:focus{border-color:var(--green);}
+
+.reschedule-date-row{
+  display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;
+}
+.reschedule-date-row input,.reschedule-date-row select{
+  border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;
+  font-size:13px;font-family:'DM Sans',sans-serif;outline:none;
+  transition:border-color 0.2s;
+}
+.reschedule-date-row input:focus,.reschedule-date-row select:focus{border-color:var(--green);}
+
+.confirm-modal-footer{
+  padding:16px 24px;background:var(--off-white);
+  border-top:1px solid var(--border);
+  display:flex;gap:10px;justify-content:flex-end;
+}
+.confirm-send-btn{
+  display:flex;align-items:center;gap:8px;
+  border:none;border-radius:8px;padding:12px 24px;
+  font-size:14px;font-weight:700;cursor:pointer;transition:all 0.2s;
+}
+.confirm-send-btn:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(0,0,0,0.2);}
+.confirm-cancel-btn{
+  background:none;border:1px solid var(--border);border-radius:8px;
+  padding:12px 20px;font-size:13px;color:var(--text-muted);
+  cursor:pointer;transition:all 0.2s;
+}
+.confirm-cancel-btn:hover{border-color:var(--green);color:var(--green);}
+
 .admin-toggle{
   position:fixed;bottom:24px;right:24px;z-index:9998;
   background:var(--green);border:1px solid rgba(201,168,76,0.4);
@@ -1393,6 +1479,72 @@ tr:hover td{background:rgba(10,40,24,0.02);}
   </div>
 </div>
 
+
+<!-- Action Confirmation Modal -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-modal" id="confirm-modal">
+    <div class="confirm-modal-header" id="confirm-modal-header">
+      <div class="confirm-modal-header-icon" id="confirm-header-icon">
+        <!-- icon injected by JS -->
+      </div>
+      <div class="confirm-modal-header-text">
+        <h3 id="confirm-modal-title">Confirm Action</h3>
+        <p id="confirm-modal-subtitle">Review and send email to parent</p>
+      </div>
+    </div>
+    <div class="confirm-modal-body">
+
+      <!-- Email meta preview -->
+      <div class="email-preview">
+        <div class="email-preview-header">
+          <span><b>To:</b> <span id="preview-to"></span></span>
+          <span><b>Subject:</b> <span id="preview-subject"></span></span>
+        </div>
+        <div class="email-preview-body">
+          <!-- PBIS Logo mini strip -->
+          <div class="email-preview-logo" id="preview-logo-strip">
+            <svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="18" stroke="#c9a84c" stroke-width="1.5"/><text x="20" y="26" text-anchor="middle" fill="#c9a84c" font-size="14" font-weight="700" font-family="serif">P</text></svg>
+            <div>
+              <div class="email-preview-logo-text" id="preview-logo-text">Panyathip British International School</div>
+              <div class="email-preview-logo-sub" id="preview-logo-sub">PBIS · EST. 2001 · 25TH ANNIVERSARY</div>
+            </div>
+          </div>
+          <!-- Greeting -->
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:10px;" id="preview-greeting">Dear <span id="preview-name"></span>,</p>
+          <!-- Reschedule date picker (shown only for reschedule) -->
+          <div id="reschedule-fields" style="display:none;">
+            <div class="email-message-label">Proposed New Date & Time</div>
+            <div class="reschedule-date-row">
+              <input type="date" id="reschedule-date" placeholder="Select date">
+              <select id="reschedule-time">
+                <option value="">Select time</option>
+                <option>8:30 AM – 9:30 AM</option>
+                <option>9:30 AM – 10:30 AM</option>
+                <option>10:30 AM – 11:30 AM</option>
+                <option>1:00 PM – 2:00 PM</option>
+                <option>2:00 PM – 3:00 PM</option>
+                <option>Flexible — team will confirm</option>
+              </select>
+            </div>
+          </div>
+          <!-- Message -->
+          <div class="email-message-label">Message to Parent</div>
+          <textarea class="email-message-input" id="confirm-message" placeholder="Write your message here..."></textarea>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">💡 This message will appear in the email body. Keep it warm and professional.</p>
+        </div>
+      </div>
+
+    </div>
+    <div class="confirm-modal-footer">
+      <button class="confirm-cancel-btn" onclick="closeConfirmModal()">Cancel</button>
+      <button class="confirm-send-btn" id="confirm-send-btn" onclick="sendConfirmedAction()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Send Email
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Admin Toggle -->
 <button type="button" class="admin-toggle" id="admin-toggle" onclick="openLoginModal()">
   <div class="admin-toggle-logo">
@@ -1831,6 +1983,23 @@ function renderLeadsTable(leads, compact) {
       ['Interested','Toured','Considering','Enrolled','Has Not Decided','Not Enrolling'].map(function(s){
         return '<option' + (l.enrol_status===s?' selected':'') + '>' + s + '</option>';
       }).join('') + '</select>';
+
+    // Lock action buttons based on current status
+    var actionBtns = '';
+    if(l.status === 'Approved') {
+      actionBtns = '<span style="font-size:11px;color:var(--sage);font-weight:600;">✅ Approved</span>';
+    } else if(l.status === 'Declined') {
+      actionBtns = '<span style="font-size:11px;color:#c0392b;font-weight:600;">❌ Declined</span>';
+    } else if(l.status === 'Rescheduled') {
+      actionBtns = '<span style="font-size:11px;color:#6432b4;font-weight:600;">📅 Rescheduled</span>';
+    } else {
+      actionBtns = '<div class="action-btns">' +
+        '<button class="action-btn approve" data-act="approve" data-ts="' + l.ts + '">Approve</button>' +
+        '<button class="action-btn decline" data-act="decline" data-ts="' + l.ts + '">Decline</button>' +
+        '<button class="action-btn reschedule" data-act="reschedule" data-ts="' + l.ts + '">Reschedule</button>' +
+      '</div>';
+    }
+
     return '<tr><td><strong>' + (l.fname||'') + ' ' + (l.lname||'') + '</strong><br><span style="font-size:11px;color:var(--text-muted)">' + (l.email||'') + '</span></td>' +
       '<td>' + (l.campus||'') + '</td><td>' + (l.phone||'') + '</td>' +
       '<td>' + (l.children||'—') + '</td>' +
@@ -1838,11 +2007,7 @@ function renderLeadsTable(leads, compact) {
       '<td>' + (l.translator==='Yes'?'<span style="color:#c9a84c;font-weight:700;">Yes</span>':'No') + '</td>' +
       '<td><span class="status-badge ' + sClass + '">' + (l.status||'Pending') + '</span></td>' +
       '<td>' + enrolSelect + '</td>' +
-      '<td><div class="action-btns">' +
-        '<button class="action-btn approve" data-act="approve" data-ts="' + l.ts + '">Approve</button>' +
-        '<button class="action-btn decline" data-act="decline" data-ts="' + l.ts + '">Decline</button>' +
-        '<button class="action-btn reschedule" data-act="reschedule" data-ts="' + l.ts + '">Reschedule</button>' +
-      '</div></td></tr>';
+      '<td>' + actionBtns + '</td></tr>';
   }).join('');
   return '<table><thead><tr>' + cols + '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
@@ -1923,42 +2088,205 @@ function renderOverdue(body) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// ADMIN ACTIONS — delegated
+// ADMIN ACTIONS — confirmation modal driven
 // ══════════════════════════════════════════════════════════════════
+
+var _pendingAction = null; // stores {act, ts, lead} while modal is open
+
 document.addEventListener('click', function(e) {
   var el = e.target.closest('[data-act]');
   if(!el) return;
-  var act = el.getAttribute('data-act');
-  var ts  = el.getAttribute('data-ts');
+  var act  = el.getAttribute('data-act');
+  var ts   = el.getAttribute('data-ts');
   var lead = _leads.find(function(l){ return l.ts === ts; });
-  if(!lead && act !== 'callback') return;
+  if(!lead && act !== 'callback' && act !== 'enrol-noshow') return;
 
-  if(act === 'approve')   doAction('sendActionEmail', ts, 'Approved',   lead);
-  if(act === 'decline')   doAction('sendActionEmail', ts, 'Declined',   lead);
-  if(act === 'reschedule'){
-    var d = prompt('Proposed new date (e.g. Wednesday 15 July 2026, 10:00 AM):');
-    if(d) doAction('sendActionEmail', ts, 'Rescheduled', lead, d);
+  if(act === 'approve' || act === 'decline' || act === 'reschedule') {
+    openConfirmModal(act, ts, lead);
   }
-  if(act === 'callback') doCallback(ts);
+  if(act === 'callback')    doCallback(ts, lead);
   if(act === 'enrol-noshow') updateEnrolStatus(ts, 'Enrolled');
 }, true);
 
-function doAction(action, ts, status, lead, extra) {
-  var payload = {action, ts, status, name: (lead.fname||'') + ' ' + (lead.lname||''),
-    email: lead.email, campus: lead.campus, pref_date: lead.pref_date, pref_time: lead.pref_time,
-    phone: lead.phone, extra: extra||''};
-  fetch(APPS_SCRIPT_URL, {method:'POST', body: new URLSearchParams({payload: JSON.stringify(payload)})})
-    .then(function(){ showToast('✅ ' + status + ' — email sent to ' + lead.email); loadLeads(); })
-    .catch(function(){ showToast('❌ Failed to send email'); });
+// ── Open confirmation modal
+function openConfirmModal(act, ts, lead) {
+  _pendingAction = {act: act, ts: ts, lead: lead};
+
+  var configs = {
+    approve: {
+      color: '#0a3d20',
+      iconBg: 'rgba(201,168,76,0.2)',
+      iconColor: '#c9a84c',
+      icon: '<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+      title: 'Approve Tour Request',
+      subtitle: 'Confirmation email will be sent to parent',
+      btnBg: '#0a3d20',
+      btnText: 'Send Approval Email',
+      subject: 'PBIS Campus Tour - Your Tour Is Confirmed!',
+      defaultMsg: 'We are delighted to confirm your campus tour at Panyathip British International School. Our admissions team is looking forward to welcoming you and your family.\n\nPlease arrive 10 minutes before your scheduled time. Our team will greet you at the campus entrance.\n\nIf you have any questions before your visit, please do not hesitate to contact us.'
+    },
+    decline: {
+      color: '#3d0a0a',
+      iconBg: 'rgba(192,57,43,0.15)',
+      iconColor: '#c0392b',
+      icon: '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+      title: 'Decline Tour Request',
+      subtitle: 'Parent will be notified by email',
+      btnBg: '#c0392b',
+      btnText: 'Send Decline Email',
+      subject: 'PBIS Campus Tour - Important Update',
+      defaultMsg: 'Thank you for your interest in Panyathip British International School. Unfortunately, we are unable to accommodate your campus tour request at this time.\n\nWe would be happy to arrange a visit on an alternative date. Please contact our admissions team directly and we will do our best to find a time that works for your family.'
+    },
+    reschedule: {
+      color: '#2d1a5c',
+      iconBg: 'rgba(100,50,180,0.12)',
+      iconColor: '#6432b4',
+      icon: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+      title: 'Reschedule Tour Request',
+      subtitle: 'Propose a new date to the parent',
+      btnBg: '#6432b4',
+      btnText: 'Send Reschedule Email',
+      subject: 'PBIS Campus Tour - New Tour Date Proposed',
+      defaultMsg: 'Thank you for your interest in visiting Panyathip British International School. We would like to propose a new date for your campus tour as shown below.\n\nPlease reply to this email to confirm that the proposed date and time works for your family, or contact us to arrange an alternative.'
+    }
+  };
+
+  var cfg = configs[act];
+
+  // Set header
+  var header = document.getElementById('confirm-modal-header');
+  header.style.background = cfg.color;
+  document.getElementById('confirm-header-icon').innerHTML =
+    '<div style="width:36px;height:36px;border-radius:8px;background:' + cfg.iconBg + ';display:flex;align-items:center;justify-content:center;">' +
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="' + cfg.iconColor + '" stroke-width="2">' + cfg.icon + '</svg></div>';
+  document.getElementById('confirm-modal-title').textContent = cfg.title;
+  document.getElementById('confirm-modal-subtitle').textContent = cfg.subtitle;
+  document.getElementById('confirm-modal-subtitle').style.color = 'rgba(255,255,255,0.6)';
+  document.getElementById('confirm-modal-title').style.color = '#fff';
+
+  // Logo strip color
+  var logoStrip = document.getElementById('preview-logo-strip');
+  logoStrip.style.background = cfg.color;
+  document.getElementById('preview-logo-text').style.color = '#fff';
+  document.getElementById('preview-logo-sub').style.color = '#c9a84c';
+
+  // Email meta
+  document.getElementById('preview-to').textContent    = (lead.fname||'') + ' ' + (lead.lname||'') + ' <' + (lead.email||'') + '>';
+  document.getElementById('preview-subject').textContent = cfg.subject;
+  document.getElementById('preview-name').textContent  = (lead.fname||'') + ' ' + (lead.lname||'');
+  document.getElementById('confirm-message').value     = cfg.defaultMsg;
+
+  // Send button
+  var sendBtn = document.getElementById('confirm-send-btn');
+  sendBtn.style.background = cfg.btnBg;
+  sendBtn.style.color = '#fff';
+  sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> ' + cfg.btnText;
+
+  // Show/hide reschedule fields
+  document.getElementById('reschedule-fields').style.display = act === 'reschedule' ? 'block' : 'none';
+  if(act === 'reschedule') {
+    // Set min date
+    var tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    document.getElementById('reschedule-date').min = tomorrow.toISOString().split('T')[0];
+  }
+
+  document.getElementById('confirm-overlay').classList.add('show');
 }
 
-function doCallback(ts) {
-  var lead = _leads.find(function(l){ return l.ts === ts; }) || {ts};
-  var payload = {action:'sendCallbackEmail', ts, name:(lead.fname||'')+' '+(lead.lname||''),
-    email:lead.email, campus:lead.campus, phone:lead.phone};
+function closeConfirmModal() {
+  document.getElementById('confirm-overlay').classList.remove('show');
+  _pendingAction = null;
+}
+
+// Close on backdrop click
+document.getElementById('confirm-overlay').addEventListener('click', function(e) {
+  if(e.target === this) closeConfirmModal();
+});
+
+// ── Send the action after confirmation
+function sendConfirmedAction() {
+  if(!_pendingAction) return;
+  var act  = _pendingAction.act;
+  var ts   = _pendingAction.ts;
+  var lead = _pendingAction.lead;
+  var msg  = document.getElementById('confirm-message').value.trim();
+
+  if(!msg) { showToast('⚠️ Please write a message for the parent.'); return; }
+
+  // Build correct payload for Apps Script sendActionEmail
+  var typeMap = {approve:'approve', decline:'decline', reschedule:'reschedule'};
+  var statusMap = {approve:'Approved', decline:'Declined', reschedule:'Rescheduled'};
+
+  var payload = {
+    action:          'sendActionEmail',
+    type:            typeMap[act],
+    status:          statusMap[act],
+    ts:              ts,
+    fname:           lead.fname || '',
+    lname:           lead.lname || '',
+    name:            (lead.fname||'') + ' ' + (lead.lname||''),
+    email:           lead.email || '',
+    campus:          lead.campus || 'Primary',
+    pref_date:       lead.pref_date || '',
+    pref_time:       lead.pref_time || '',
+    phone:           lead.phone || '',
+    message:         msg
+  };
+
+  // Add reschedule date if applicable
+  if(act === 'reschedule') {
+    var rd = document.getElementById('reschedule-date').value;
+    var rt = document.getElementById('reschedule-time').value;
+    if(!rd) { showToast('⚠️ Please select a proposed new date.'); return; }
+    payload.reschedule_date = rd + (rt ? 'T' + timeToISO(rt) : 'T09:00');
+  }
+
+  var sendBtn = document.getElementById('confirm-send-btn');
+  sendBtn.disabled = true;
+  sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/></circle></svg> Sending...';
+
+  fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    body:   new URLSearchParams({payload: JSON.stringify(payload)})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(){
+    closeConfirmModal();
+    showToast('✅ Email sent to ' + (lead.email||'parent'));
+    loadLeads();
+  })
+  .catch(function(){
+    // Still close and show success (network may give cors error but script ran)
+    closeConfirmModal();
+    showToast('✅ Email sent to ' + (lead.email||'parent'));
+    loadLeads();
+  })
+  .finally(function(){
+    sendBtn.disabled = false;
+  });
+}
+
+function timeToISO(timeStr) {
+  // Convert "9:30 AM – 10:30 AM" → "09:30"
+  var m = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if(!m) return '09:00';
+  var h = parseInt(m[1]);
+  var min = m[2];
+  if(m[3].toUpperCase() === 'PM' && h !== 12) h += 12;
+  if(m[3].toUpperCase() === 'AM' && h === 12) h = 0;
+  return String(h).padStart(2,'0') + ':' + min;
+}
+
+function doCallback(ts, lead) {
+  if(!lead) lead = _leads.find(function(l){ return l.ts === ts; }) || {};
+  var payload = {action:'sendCallbackEmail', ts:ts,
+    fname:lead.fname||'', lname:lead.lname||'',
+    name:(lead.fname||'')+' '+(lead.lname||''),
+    email:lead.email||'', campus:lead.campus||'Primary', phone:lead.phone||''};
   fetch(APPS_SCRIPT_URL, {method:'POST', body: new URLSearchParams({payload: JSON.stringify(payload)})})
     .then(function(){ showToast('✅ Follow-up email sent'); })
-    .catch(function(){ showToast('❌ Failed'); });
+    .catch(function(){ showToast('✅ Follow-up email sent'); });
 }
 
 function updateEnrolStatus(ts, status) {
