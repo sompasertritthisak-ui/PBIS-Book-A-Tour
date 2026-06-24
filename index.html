@@ -1896,6 +1896,18 @@ function openAdmin() {
   document.getElementById('admin-session-info').textContent =
     'Session expires ' + exp.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
   loadLeads();
+  startAutoRefresh();
+}
+
+// Auto-refresh every 60s when dashboard is open — syncs across all devices
+var _autoRefreshInterval = null;
+function startAutoRefresh() {
+  if(_autoRefreshInterval) clearInterval(_autoRefreshInterval);
+  _autoRefreshInterval = setInterval(function() {
+    if(document.getElementById('admin-overlay').classList.contains('show')) {
+      loadLeads();
+    }
+  }, 60000);
 }
 
 function closeAdmin() {
@@ -1909,18 +1921,41 @@ function switchTab(tab) {
   renderTab(tab);
 }
 
-function loadLeads() {
-  fetch(APPS_SCRIPT_URL + '?action=getLeads&site=tour')
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      _leads = data.leads || [];
-      _pipeline = data.pipeline || [];
-      updateBadges();
-      renderTab(_currentTab);
-    })
-    .catch(function(){
-      renderTab(_currentTab);
+function loadLeads(callback) {
+  // Show loading state
+  var refreshBtns = document.querySelectorAll('.tbl-btn');
+  refreshBtns.forEach(function(b){
+    if(b.textContent.trim().indexOf('Refresh') !== -1) {
+      b.disabled = true;
+      b.innerHTML = b.innerHTML.replace('Refresh','Loading...');
+    }
+  });
+
+  // Always fetch fresh — no cache, timestamp-busted
+  fetch(APPS_SCRIPT_URL + '?action=getLeads&t=' + Date.now(), {
+    method: 'GET',
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache' }
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    _leads    = data.leads    || [];
+    _pipeline = data.pipeline || [];
+    updateBadges();
+    renderTab(_currentTab);
+    if(typeof callback === 'function') callback();
+  })
+  .catch(function(e){
+    console.warn('loadLeads error:', e);
+    showToast('⚠️ Could not load data — check connection');
+    renderTab(_currentTab);
+  })
+  .finally(function(){
+    refreshBtns.forEach(function(b){
+      b.disabled = false;
+      b.innerHTML = b.innerHTML.replace('Loading...','Refresh');
     });
+  });
 }
 
 function updateBadges() {
@@ -2019,16 +2054,50 @@ function renderLeadsTable(leads, compact) {
 
 function renderPipeline(body) {
   var stages = ['Interested','Toured','Considering','Enrolled','Has Not Decided','Not Enrolling'];
+
+  // Combine leads + pipeline leads, defaulting missing enrol_status to 'Interested'
+  var allCards = _leads.map(function(l) {
+    return {
+      fname:        l.fname||'',
+      lname:        l.lname||'',
+      campus:       l.campus||'',
+      enrol_status: l.enrol_status || 'Interested',
+      ts:           l.ts||''
+    };
+  });
+  // Also include pipeline-only leads
+  (_pipeline||[]).forEach(function(p) {
+    // Don't duplicate if already in _leads
+    var exists = allCards.some(function(a){ return a.ts === p.ts; });
+    if(!exists) allCards.push({
+      fname: p.fname||'', lname: p.lname||'',
+      campus: p.campus||'', enrol_status: p.enrol_status||'Interested', ts: p.ts||''
+    });
+  });
+
   var cols = stages.map(function(stage) {
-    var cards = _leads.filter(function(l){ return l.enrol_status === stage; });
-    return '<div class="kanban-col"><div class="kanban-col-title">' + stage +
+    var cards = allCards.filter(function(l){ return l.enrol_status === stage; });
+    return '<div class="kanban-col">' +
+      '<div class="kanban-col-title">' + stage.toUpperCase() +
       '<span class="kanban-count">' + cards.length + '</span></div>' +
-      cards.map(function(l){
-        return '<div class="kanban-card"><div class="kanban-card-name">' + (l.fname||'') + ' ' + (l.lname||'') + '</div>' +
-          '<div class="kanban-card-campus">' + (l.campus||'') + '</div></div>';
-      }).join('') + '</div>';
+      (cards.length === 0
+        ? '<div style="padding:12px;font-size:11px;color:var(--text-muted);text-align:center;">No leads</div>'
+        : cards.map(function(l){
+            return '<div class="kanban-card">' +
+              '<div class="kanban-card-name">' + l.fname + ' ' + l.lname + '</div>' +
+              '<div class="kanban-card-campus">' + l.campus + '</div></div>';
+          }).join('')) +
+      '</div>';
   }).join('');
-  body.innerHTML = '<div class="panel-header"><div class="panel-title">Leads Pipeline</div></div>' +
+
+  body.innerHTML =
+    '<div class="panel-header">' +
+    '<div class="panel-title">Leads Pipeline</div>' +
+    '<div style="display:flex;gap:8px;">' +
+    '<button class="tbl-btn outline" onclick="loadLeads()">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>' +
+    'Refresh</button>' +
+    '</div></div>' +
     '<div class="kanban">' + cols + '</div>';
 }
 
@@ -2251,24 +2320,49 @@ function sendConfirmedAction() {
   sendBtn.disabled = true;
   sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/></circle></svg> Sending...';
 
+  // Update local state IMMEDIATELY so UI reflects change without waiting for server
+  var newStatus = statusMap[act];
+  _leads = _leads.map(function(l) {
+    if(l.ts === ts) { return Object.assign({}, l, {status: newStatus}); }
+    return l;
+  });
+  renderTab(_currentTab);
+  closeConfirmModal();
+  showToast('✅ Sending email to ' + (lead.email||'parent') + '...');
+
+  // Step 1: Send the email
   fetch(APPS_SCRIPT_URL, {
     method: 'POST',
     body:   new URLSearchParams({payload: JSON.stringify(payload)})
   })
-  .then(function(r){ return r.json(); })
   .then(function(){
-    closeConfirmModal();
     showToast('✅ Email sent to ' + (lead.email||'parent'));
-    loadLeads();
   })
   .catch(function(){
-    // Still close and show success (network may give cors error but script ran)
-    closeConfirmModal();
     showToast('✅ Email sent to ' + (lead.email||'parent'));
-    loadLeads();
   })
   .finally(function(){
     sendBtn.disabled = false;
+  });
+
+  // Step 2: Write status to Sheets (separate call — ensures Sheets always updated)
+  var statusPayload = {
+    action:         'updateStatus',
+    ts:             ts,
+    email:          lead.email || '',
+    status:         statusMap[act],
+    reschedule_date: act === 'reschedule' ? payload.reschedule_date : ''
+  };
+  fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    body:   new URLSearchParams({payload: JSON.stringify(statusPayload)})
+  })
+  .then(function(){
+    // Reload from server after both calls complete
+    setTimeout(loadLeads, 2000);
+  })
+  .catch(function(){
+    setTimeout(loadLeads, 2000);
   });
 }
 
@@ -2295,10 +2389,36 @@ function doCallback(ts, lead) {
 }
 
 function updateEnrolStatus(ts, status) {
-  var payload = {action:'updateEnrollment', ts, enrol_status: status};
-  fetch(APPS_SCRIPT_URL, {method:'POST', body: new URLSearchParams({payload: JSON.stringify(payload)})})
-    .then(function(){ loadLeads(); })
-    .catch(function(){});
+  // Update local state immediately so pipeline reflects change now
+  _leads = _leads.map(function(l) {
+    if(l.ts === ts) { return Object.assign({}, l, {enrol_status: status}); }
+    return l;
+  });
+  // If on pipeline tab, re-render immediately
+  if(_currentTab === 'pipeline') renderTab('pipeline');
+
+  // Persist to server
+  var lead = _leads.find(function(l){ return l.ts === ts; }) || {};
+  var payload = {
+    action:       'updateEnrollment',
+    ts:           ts,
+    email:        lead.email || '',
+    enrol_status: status
+  };
+  fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    body:   new URLSearchParams({payload: JSON.stringify(payload)})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data.status === 'ok') {
+      // Reload from Sheets after 1.5s to confirm sync
+      setTimeout(loadLeads, 1500);
+    }
+  })
+  .catch(function(){
+    setTimeout(loadLeads, 1500);
+  });
 }
 
 // GA4 section visibility
@@ -3034,28 +3154,37 @@ function sendCallbackEmail() {
   });
 }
 
+
 function deleteLead(ts) {
-  if(!confirm('Remove this lead? This will also remove it from Google Sheets.')) return;
-  const lead = getLeads().find(l => l.ts === ts);
+  if(!confirm('Delete this lead permanently from the dashboard and Google Sheets?')) return;
+  var lead = _leads.find(function(l){ return l.ts === ts; }) || {};
+  
+  // Remove locally first
+  _leads = _leads.filter(function(l){ return l.ts !== ts; });
+  renderTab(_currentTab);
+  updateBadges();
 
-  // Optimistic local update
-  applyLocalMutation(leads => {
-    const idx = leads.findIndex(l => l.ts === ts);
-    if(idx !== -1) leads.splice(idx, 1);
-  });
-
-  // Sync deletion to Google Sheets
-  postToSheets({
+  // Delete from Sheets
+  var payload = {
     action: 'deleteLead',
-    ts: ts,
-    email: lead ? lead.email : ''
-  }).then(() => {
-    _leadsCache = null;
+    ts:     ts,
+    email:  lead.email || ''
+  };
+  fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    body:   new URLSearchParams({payload: JSON.stringify(payload)})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    showToast('🗑️ Lead deleted from Sheets');
+    setTimeout(loadLeads, 1000);
+  })
+  .catch(function(){
+    showToast('🗑️ Lead deleted');
+    setTimeout(loadLeads, 1000);
   });
-
-  loadData();
-  showToast('🗑 Lead removed & synced to Sheets');
 }
+
 
 function openModal() {
   document.getElementById('modal-backdrop').classList.add('open');
