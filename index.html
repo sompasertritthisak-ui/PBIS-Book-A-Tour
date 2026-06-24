@@ -67,9 +67,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--off-white);color:var(--te
 /* ── NAV ── */
 nav{
   position:sticky;top:0;z-index:999;
-  background:rgba(255,255,255,0.96);
+  background:var(--green);
   backdrop-filter:blur(12px);
-  border-bottom:1px solid var(--border);
+  border-bottom:1px solid rgba(201,168,76,0.25);
   padding:0 5%;
   height:70px;
   display:flex;align-items:center;justify-content:space-between;
@@ -82,19 +82,34 @@ nav{
   flex-shrink:0;overflow:hidden;
 }
 .nav-logo-circle svg{width:26px;height:26px;}
-.nav-logo-text h1{font-size:13px;font-weight:700;color:var(--green);letter-spacing:0.02em;line-height:1.2;}
-.nav-logo-text p{font-size:10px;color:var(--gold);font-weight:600;letter-spacing:0.1em;text-transform:uppercase;}
+.nav-logo-text h1{font-size:13px;font-weight:700;color:var(--white);letter-spacing:0.02em;line-height:1.2;}
+.nav-logo-text p{font-size:10px;color:var(--gold-light);font-weight:600;letter-spacing:0.1em;text-transform:uppercase;}
 .nav-links{display:flex;align-items:center;gap:28px;list-style:none;}
-.nav-links a{font-size:13px;font-weight:500;color:var(--text-muted);text-decoration:none;transition:color 0.2s;}
-.nav-links a:hover{color:var(--green);}
+.nav-links a{font-size:13px;font-weight:500;color:rgba(255,255,255,0.7);text-decoration:none;transition:color 0.2s;}
+.nav-links a:hover{color:var(--gold-light);}
 .nav-right{display:flex;align-items:center;gap:12px;}
 .nav-cta{
-  background:var(--green);color:var(--white)!important;
+  background:var(--gold);color:var(--navy)!important;
   padding:10px 22px;border-radius:6px;
-  font-size:13px;font-weight:600;letter-spacing:0.03em;
+  font-size:13px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;
   text-decoration:none;transition:all 0.2s;white-space:nowrap;
+  box-shadow:0 2px 12px rgba(201,168,76,0.35);
 }
-.nav-cta:hover{background:var(--green2);transform:translateY(-1px);box-shadow:0 4px 16px rgba(10,40,24,0.25);}
+.nav-cta:hover{background:var(--gold-light);transform:translateY(-2px);box-shadow:0 6px 20px rgba(201,168,76,0.5);}
+.nav-website-link{
+  font-size:13px;font-weight:500;
+  color:rgba(255,255,255,0.7)!important;
+  text-decoration:none;
+  border:1px solid rgba(255,255,255,0.25);
+  padding:9px 18px;border-radius:6px;
+  transition:all 0.2s;white-space:nowrap;
+  letter-spacing:0.02em;
+}
+.nav-website-link:hover{
+  color:var(--white)!important;
+  border-color:rgba(255,255,255,0.6);
+  background:rgba(255,255,255,0.08);
+}
 
 /* ── HERO ── */
 .hero{
@@ -941,7 +956,7 @@ tr:hover td{background:rgba(10,40,24,0.02);}
     <li><a href="#contact">Contact</a></li>
   </ul>
   <div class="nav-right">
-    <a href="https://www.pbis.edu.la" target="_blank" rel="noopener" style="font-size:13px;color:var(--text-muted);text-decoration:none;font-weight:500;">PBIS Website</a>
+    <a href="https://www.pbis.edu.la" target="_blank" rel="noopener" class="nav-website-link">PBIS Website</a>
     <a href="#book-tour" class="nav-cta">Book a Tour</a>
   </div>
 </nav>
