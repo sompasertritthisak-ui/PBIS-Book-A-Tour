@@ -1601,6 +1601,10 @@ tr:hover td{background:rgba(10,40,24,0.02);}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       Calendar
     </div>
+    <div class="admin-tab" data-tab="schedule" onclick="switchTab('schedule')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Schedule
+    </div>
     <div class="admin-tab" data-tab="overdue" onclick="switchTab('overdue')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       Overdue
@@ -1932,6 +1936,7 @@ function renderTab(tab) {
   else if(tab === 'requests') renderRequests(body);
   else if(tab === 'pipeline') renderPipeline(body);
   else if(tab === 'calendar') renderCalendar(body);
+  else if(tab === 'schedule') renderSchedule(body);
   else if(tab === 'overdue')  renderOverdue(body);
 }
 
@@ -2316,6 +2321,990 @@ window.addEventListener('load', function() {
     if(el){el.setAttribute('data-ga-label',sections[id]);obs.observe(el);}
   });
 });
+
+// == Ported Admin Functions ==
+
+var APPS_URL = APPS_SCRIPT_URL;
+function getSessions(){return [];}
+function mergeLeads(a){_leads=a;}
+function getLeads(){return _leads;}
+
+function openActionModal(type, ts) {
+  const leads = getLeads();
+  const lead = leads.find(l => l.ts === ts);
+  if(!lead) return;
+
+  _actionTs = ts;
+  _actionType = type;
+
+  const header = document.getElementById('action-modal-header');
+  const title  = document.getElementById('action-modal-title');
+  const sub    = document.getElementById('action-modal-subtitle');
+  const info   = document.getElementById('action-modal-lead-info');
+  const confirmBtn = document.getElementById('action-modal-confirm-btn');
+
+  // Set header colour + title
+  header.className = 'action-modal-header ' + type;
+  const labels = {
+    approve:    ['✅ Approve Visit', 'Send confirmation email to parent'],
+    decline:    ['❌ Decline Request', 'Send decline notification to parent'],
+    reschedule: ['📅 Reschedule Visit', 'Propose a new date and time to parent']
+  };
+  title.textContent  = labels[type][0];
+  sub.textContent    = labels[type][1];
+  confirmBtn.className = 'btn-modal-confirm ' + type;
+  confirmBtn.textContent = type === 'approve' ? '✅ Approve & Send Email'
+    : type === 'decline' ? '❌ Decline & Notify'
+    : '📅 Reschedule & Notify';
+
+  // Lead info card
+  info.innerHTML = `
+    <h4>${lead.fname} ${lead.lname}</h4>
+    <p>📧 ${lead.email||'—'} &nbsp;·&nbsp; 📞 ${lead.phone||'—'}</p>
+    <p>🏫 ${lead.campus||'?'} Campus &nbsp;·&nbsp; 👶 ${lead.num_children||'?'} child(ren) &nbsp;·&nbsp; 🌍 ${lead.nationality||'—'}</p>
+    ${lead.translator==='Yes' ? '<p style="color:#1a7a45;font-weight:600;margin-top:4px;">🇱🇦 Lao translator requested</p>' : ''}
+  `;
+
+  // Show/hide correct fields
+  document.getElementById('action-approve-fields').style.display    = type === 'approve'    ? 'block' : 'none';
+  document.getElementById('action-decline-fields').style.display    = type === 'decline'    ? 'block' : 'none';
+  document.getElementById('action-reschedule-fields').style.display = type === 'reschedule' ? 'block' : 'none';
+
+  // Pre-fill reschedule datetime to Open Day
+  if(type === 'reschedule') {
+    document.getElementById('action-reschedule-dt').value = '2026-06-13T09:00';
+  }
+
+  document.getElementById('action-modal-backdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeActionModal() {
+  document.getElementById('action-modal-backdrop').classList.remove('open');
+  document.body.style.overflow = '';
+  _actionTs = null; _actionType = null;
+}
+
+function confirmAction() {
+  if(!_actionTs || !_actionType) return;
+  const leads = getLeads();
+  const idx = leads.findIndex(l => l.ts === _actionTs);
+  if(idx === -1) return;
+
+  const lead = leads[idx];
+  const statusMap = { approve: 'Approved', decline: 'Declined', reschedule: 'Rescheduled' };
+  const newStatus = statusMap[_actionType];
+
+  // Get message
+  let message = '', rescheduleDate = '';
+  if(_actionType === 'approve')    message = document.getElementById('action-approve-msg').value;
+  if(_actionType === 'decline')    message = document.getElementById('action-decline-msg').value;
+  if(_actionType === 'reschedule') {
+    message = document.getElementById('action-reschedule-msg').value;
+    rescheduleDate = document.getElementById('action-reschedule-dt').value;
+  }
+
+  // Record as pending so auto-refresh doesn't wipe this change
+  recordPending(_actionTs, {
+    status:         newStatus,
+    action_message: message,
+    reschedule_date: rescheduleDate,
+    actioned_at:    new Date().toISOString()
+  });
+
+  applyLocalMutation(ls => {
+    const i = ls.findIndex(x => x.ts === _actionTs);
+    if(i !== -1) {
+      ls[i].status         = newStatus;
+      ls[i].action_message = message;
+      ls[i].reschedule_date = rescheduleDate;
+      ls[i].actioned_at    = new Date().toISOString();
+    }
+  });
+
+  // 2. Sync to Google Sheets
+  postToSheets({
+      action: 'updateStatus',
+      ts: _actionTs,
+      email: lead.email || '',
+      fname: lead.fname || '',
+      lname: lead.lname || '',
+      status: newStatus,
+      message: message,
+      reschedule_date: rescheduleDate
+    });
+
+  // 3. Send email via Google Apps Script
+  postToSheets({
+    action: 'sendActionEmail',
+    type: _actionType,
+    email: lead.email || '',
+    fname: lead.fname || '',
+    lname: lead.lname || '',
+    campus: lead.campus || '',
+    num_children: lead.num_children || '',
+    translator: lead.translator || '',
+    phone: lead.phone || '',
+    message: message,
+    reschedule_date: rescheduleDate,
+    status: newStatus
+  }).then(() => {
+    showToast(`${newStatus === 'Approved' ? '✅' : newStatus === 'Declined' ? '❌' : '📅'} ${lead.fname} ${lead.lname} — ${newStatus}. Email sent to ${lead.email}`);
+  });
+
+  closeActionModal();
+  loadData();
+}
+
+function resetToPending(ts) {
+  if(!confirm('Reset this lead back to Pending?')) return;
+  const lead = getLeads().find(l => l.ts === ts);
+  recordPending(ts, { status: 'Pending', action_message: '', actioned_at: '' });
+  applyLocalMutation(leads => {
+    const idx = leads.findIndex(l => l.ts === ts);
+    if(idx !== -1) {
+      leads[idx].status = 'Pending';
+      delete leads[idx].action_message;
+      delete leads[idx].actioned_at;
+    }
+  });
+  postToSheets({ action: 'updateStatus', ts, email: lead ? lead.email : '', status: 'Pending' });
+  showToast('↩ Lead reset to Pending');
+  loadData();
+}
+
+function renderStats(total, today, pending, approved, declined, translators) {
+  return `<div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-icon">👨‍👩‍👧</div>
+      <div class="stat-label">Total Registrations</div>
+      <div class="stat-value">${total}</div>
+      <div class="stat-sub">All time submissions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">⏳</div>
+      <div class="stat-label">Awaiting Review</div>
+      <div class="stat-value" style="color:#b45309;">${pending}</div>
+      <div class="stat-sub">Pending your action</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">✅</div>
+      <div class="stat-label">Approved</div>
+      <div class="stat-value" style="color:#2d9e5f;">${approved}</div>
+      <div class="stat-sub">Confirmed visits</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">❌</div>
+      <div class="stat-label">Declined</div>
+      <div class="stat-value" style="color:#e05252;">${declined}</div>
+      <div class="stat-sub">Could not accommodate</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🇱🇦</div>
+      <div class="stat-label">Need Translator</div>
+      <div class="stat-value">${translators}</div>
+      <div class="stat-sub">Lao translator requested</div>
+    </div>
+  </div>`;
+}
+
+function renderCampusChart(counts, total) {
+  const campusColors = { 'EY':'#2d9e5f','Primary':'#3b82f6','Secondary':'#8b5cf6','Multiple':'#c9a84c','Unknown':'#9a9080' };
+  const campusLabels = { 'EY':'Early Years','Primary':'Primary','Secondary':'Secondary','Multiple':'Multiple','Unknown':'Other' };
+  const rows = Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([k,v]) => `
+    <div class="bar-row">
+      <div class="bar-label">${campusLabels[k]||k}</div>
+      <div class="bar-track"><div class="bar-fill" data-w="${Math.round(v/total*100)}" style="width:0;background:${campusColors[k]||'#c9a84c'};"></div></div>
+      <div class="bar-count">${v}</div>
+    </div>`).join('');
+  return `<div class="panel">
+    <div class="panel-title">Campus Interest <span>By Registrations</span></div>
+    <div class="bar-chart">${rows}</div>
+  </div>`;
+}
+
+function renderSourceChart(counts, total) {
+  const colors = ['#c9a84c','#3b82f6','#8b5cf6','#2d9e5f','#e05252','#f59e0b','#06b6d4'];
+  const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const legend = entries.map(([k,v],i) => `
+    <div class="legend-item">
+      <div class="legend-dot" style="background:${colors[i%colors.length]};"></div>
+      <span>${k}</span>
+      <strong style="margin-left:auto;padding-left:12px;">${v}</strong>
+    </div>`).join('');
+  // Simple SVG donut
+  const size=120, r=46, cx=60, cy=60;
+  const circ = 2*Math.PI*r;
+  let offset=0;
+  const slices = entries.map(([k,v],i) => {
+    const pct = v/total;
+    const dash = pct*circ;
+    const el = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colors[i%colors.length]}" stroke-width="18" stroke-dasharray="${dash.toFixed(1)} ${circ.toFixed(1)}" stroke-dashoffset="${(-offset*circ).toFixed(1)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    offset += pct; return el;
+  }).join('');
+  return `<div class="panel">
+    <div class="panel-title">Traffic Sources <span>Where They Came From</span></div>
+    <div class="donut-wrap">
+      <svg width="${size}" height="${size}" class="donut-svg"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#f0ede6" stroke-width="18"/>${slices}<text x="${cx}" y="${cy}" text-anchor="middle" dy="5" font-family="Cormorant Garamond,serif" font-size="22" fill="#0a2818">${total}</text></svg>
+      <div class="donut-legend">${legend}</div>
+    </div>
+  </div>`;
+}
+
+function renderFunnel(total, visits, toured, enrolled) {
+  const steps = [
+    { label:'Page Visits', n: Math.max(visits, total), color:'#3b82f6' },
+    { label:'Form Started', n: Math.round(total*0.85), color:'#8b5cf6' },
+    { label:'Registered', n: total, color:'#c9a84c' },
+    { label:'Toured Campus', n: toured||Math.round(total*0.6), color:'#2d9e5f' },
+    { label:'Enrolled', n: enrolled||0, color:'#e8c96e' },
+  ];
+  const max = steps[0].n || 1;
+  const rows = steps.map(s => `
+    <div class="funnel-step" style="background:#f8f5ee;border-left:3px solid ${s.color};">
+      <span class="funnel-label">${s.label}</span>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="funnel-pct">${max>0?Math.round(s.n/max*100):0}%</span>
+        <span class="funnel-num">${s.n}</span>
+      </div>
+      <div style="position:absolute;left:0;top:0;bottom:0;width:${Math.round(s.n/max*100)}%;background:${s.color};opacity:0.08;transition:width 1s ease;border-radius:0 4px 4px 0;"></div>
+    </div>`).join('');
+  return `<div class="panel">
+    <div class="panel-title">Conversion Funnel <span>Visits → Enrolled</span></div>
+    <div class="funnel">${rows}</div>
+  </div>`;
+}
+
+function animateFunnel() {
+  document.querySelectorAll('.bar-fill').forEach(el => {
+    if(el.dataset.w) el.style.width = el.dataset.w + '%';
+  });
+}
+
+function renderTimeline(leads) {
+  // Group by date
+  const byDate = {};
+  leads.forEach(l => {
+    const d = new Date(l.ts).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    byDate[d] = (byDate[d]||0) + 1;
+  });
+  const dates = Object.keys(byDate).slice(-7);
+  const max = Math.max(...dates.map(d=>byDate[d]),1);
+  const bars = dates.map(d => `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;">
+      <div style="font-size:11px;font-weight:700;color:var(--navy);">${byDate[d]}</div>
+      <div style="width:100%;background:#f0ede6;border-radius:4px;height:80px;display:flex;align-items:flex-end;overflow:hidden;">
+        <div style="width:100%;height:${Math.round(byDate[d]/max*100)}%;background:linear-gradient(to top,var(--gold),var(--gold-light));border-radius:4px 4px 0 0;transition:height 1s ease;"></div>
+      </div>
+      <div style="font-size:10px;color:var(--gray-mid);text-align:center;">${d}</div>
+    </div>`).join('');
+  return `<div class="panel">
+    <div class="panel-title">Registrations Over Time <span>Last 7 Days</span></div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;">${bars}</div>
+  </div>`;
+}
+
+function renderTable(leads) {
+  const searchId = 'search-' + Date.now();
+  const filterId = 'filter-' + Date.now();
+  const statusFilter = 'statusf-' + Date.now();
+
+  const statusPill = (s) => {
+    const map = {
+      'Pending':     'status-pending',
+      'Approved':    'status-approved',
+      'Declined':    'status-declined',
+      'Rescheduled': 'status-rescheduled',
+    };
+    const icons = { 'Pending':'⏳','Approved':'✅','Declined':'❌','Rescheduled':'📅' };
+    const st = s || 'Pending';
+    return `<span class="status-pill ${map[st]||'status-pending'}">${icons[st]||'⏳'} ${st}</span>`;
+  };
+
+  const campusBadge = (c) => {
+    const map = {'EY':'badge-ey','Primary':'badge-pri','Secondary':'badge-sec','Multiple':'badge-multi'};
+    return `<span class="badge ${map[c]||'badge-multi'}">${c||'—'}</span>`;
+  };
+
+  const rows = leads.slice().reverse().map((l) => {
+    const st = l.status || 'Pending';
+    const isPending = st === 'Pending' || st === 'New';
+    const actionBtns = isPending
+      ? `<div class="action-btns">
+          <button class="btn-approve"    onclick="openActionModal('approve','${l.ts}')">✅ Approve</button>
+          <button class="btn-decline"    onclick="openActionModal('decline','${l.ts}')">❌ Decline</button>
+          <button class="btn-reschedule" onclick="openActionModal('reschedule','${l.ts}')">📅 Reschedule</button>
+         </div>`
+      : `<div class="action-btns">
+          ${statusPill(st)}
+          <button style="background:none;border:1px solid #e0dbd0;color:var(--gray-mid);padding:4px 8px;border-radius:4px;font-size:10px;cursor:pointer;font-family:sans-serif,sans-serif;" onclick="resetToPending('${l.ts}')">↩ Reset</button>
+         </div>`;
+
+    return `<tr data-campus="${l.campus||''}" data-name="${(l.fname+' '+l.lname).toLowerCase()}" data-status="${st}">
+      <td style="font-weight:600;color:var(--navy);white-space:nowrap;">${l.fname||'—'} ${l.lname||''}</td>
+      <td>${l.nationality||'—'}</td>
+      <td><a href="tel:${l.phone}" style="color:var(--navy);text-decoration:none;white-space:nowrap;">${l.phone||'—'}</a></td>
+      <td><a href="mailto:${l.email}" style="color:var(--gold);text-decoration:none;">${l.email||'—'}</a></td>
+      <td>${campusBadge(l.campus)}</td>
+      <td style="text-align:center;">${l.num_children||'—'}</td>
+      <td style="text-align:center;">${l.translator==='Yes'?'<span style="color:#2d9e5f;font-weight:600;">✓</span>':'—'}</td>
+      <td>${l.source||'Direct'}</td>
+      <td style="white-space:nowrap;">${new Date(l.ts).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'})}</td>
+      <td>${actionBtns}</td>
+      <td><button class="delete-btn" onclick="deleteLead('${l.ts}')" title="Remove lead">🗑</button></td>
+    </tr>`;
+  }).join('');
+
+  // Count by status for filter badges
+  const counts = { All: leads.length, Pending: 0, Approved: 0, Declined: 0, Rescheduled: 0 };
+  leads.forEach(l => {
+    const st = l.status||'Pending';
+    if(counts[st] !== undefined) counts[st]++;
+    else counts['Pending']++;
+  });
+
+  return `<div class="panel" style="margin-bottom:20px;">
+    <div class="panel-title">All Registrations <span>${leads.length} Total</span></div>
+    <div class="table-controls">
+      <input type="text" id="${searchId}" class="search-input" placeholder="🔍  Search by name, email, phone…" oninput="filterTable('${searchId}','${filterId}','${statusFilter}')">
+      <select id="${filterId}" class="filter-select" onchange="filterTable('${searchId}','${filterId}','${statusFilter}')">
+        <option value="">All Campuses</option>
+        <option value="EY">Early Years</option>
+        <option value="Primary">Primary</option>
+        <option value="Secondary">Secondary</option>
+      </select>
+      <select id="${statusFilter}" class="filter-select" onchange="filterTable('${searchId}','${filterId}','${statusFilter}')">
+        <option value="">All Statuses (${counts.All})</option>
+        <option value="Pending">⏳ Pending (${counts.Pending})</option>
+        <option value="Approved">✅ Approved (${counts.Approved})</option>
+        <option value="Declined">❌ Declined (${counts.Declined})</option>
+        <option value="Rescheduled">📅 Rescheduled (${counts.Rescheduled})</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table class="leads-table" id="leads-tbl">
+        <thead><tr>
+          <th>Parent Name</th><th>Nationality</th><th>Phone</th><th>Email</th>
+          <th>Campus</th><th>Children</th><th>Translator</th><th>Source</th><th>Date</th><th>Action / Status</th><th></th>
+        </tr></thead>
+        <tbody id="leads-tbody">${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function filterTable(searchId, filterId, statusFilterId) {
+  const q      = (document.getElementById(searchId)?.value||'').toLowerCase();
+  const campus = document.getElementById(filterId)?.value||'';
+  const status = statusFilterId ? (document.getElementById(statusFilterId)?.value||'') : '';
+  document.querySelectorAll('#leads-tbody tr').forEach(row => {
+    const text   = row.textContent.toLowerCase();
+    const rc     = row.dataset.campus||'';
+    const rst    = row.dataset.status||'';
+    const matchQ = !q || text.includes(q);
+    const matchC = !campus || rc === campus;
+    const matchS = !status || rst === status || (status === 'Pending' && (rst === '' || rst === 'New'));
+    row.style.display = matchQ && matchC && matchS ? '' : 'none';
+  });
+}
+
+function exportCSV() {
+  const leads = getLeads();
+  if(!leads.length) { alert('No leads to export yet.'); return; }
+  const headers = ['First Name','Last Name','Nationality','Phone','Email','Relationship','Campus','Children','Translator','Source','Status','Registered'];
+  const rows = leads.map(l => [
+    l.fname||'', l.lname||'', l.nationality||'', l.phone||'', l.email||'',
+    l.relationship||'', l.campus||'', l.num_children||'', l.translator||'No',
+    l.source||'Direct', l.status||'New',
+    new Date(l.ts).toLocaleDateString('en-GB')
+  ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `PBIS_OpenDay_Leads_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function quickSetEnrolFromApproved() {
+  const ts     = document.getElementById('quick-approved-select')?.value;
+  const status = document.getElementById('quick-enrol-status')?.value;
+  if(!ts)     { showToast('⚠️ Please select a parent first'); return; }
+  if(!status) { showToast('⚠️ Please select an enrollment status'); return; }
+
+  const leads = getLeads();
+  const lead  = leads.find(l => l.ts === ts);
+  if(!lead) return;
+
+  // 1. Record as pending so refresh doesn't wipe it
+  recordPending(ts, { enrol_status: status, enrol_updated: new Date().toISOString() });
+
+  // 2. Apply locally
+  applyLocalMutation(function(ls) {
+    const idx = ls.findIndex(l => l.ts === ts);
+    if(idx !== -1) ls[idx].enrol_status = status;
+  });
+
+  // 3. Write to Pipeline Leads sheet as a NEW ROW (addPipelineLead)
+  //    This is the confirmed-working action from our debug
+  postToSheets({
+    action:       'addPipelineLead',
+    fname:        lead.fname        || '',
+    lname:        lead.lname        || '',
+    nationality:  lead.nationality  || '',
+    phone:        lead.phone        || '',
+    email:        lead.email        || '',
+    relationship: lead.relationship || '',
+    campus:       lead.campus       || '',
+    num_children: lead.num_children || '',
+    translator:   lead.translator   || '',
+    source:       lead.source       || 'Open Day Tour',
+    enrol_status: status,
+    notes:        'Auto-added from approved tour request',
+    assigned:     '',
+    ts:           lead.ts
+  }).then(function() {
+    showToast('✅ ' + (lead.fname||'') + ' added to pipeline — ' + status + ' · Saved to Sheets');
+    renderPipeline();
+  });
+}
+
+function openEnrolModal(ts) {
+  const leads = getLeads();
+  const lead = leads.find(l => l.ts === ts);
+  if(!lead) return;
+  _enrolTs = ts;
+  _enrolSelectedStatus = lead.enrol_status || null;
+
+  document.getElementById('enrol-modal-name').textContent = `${lead.fname} ${lead.lname}`;
+  document.getElementById('enrol-lead-info').innerHTML = `
+    <h4>${lead.fname} ${lead.lname}</h4>
+    <p>📞 ${lead.phone||'—'} · 📧 ${lead.email||'—'} · 🏫 ${lead.campus||'?'} Campus</p>
+    <p>Tour status: <strong>${lead.status||'Pending'}</strong>${lead.enrol_status?' · Enrollment: <strong>'+lead.enrol_status+'</strong>':''}</p>
+  `;
+
+  // Pre-select existing status
+  document.querySelectorAll('.enrol-option-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.getAttribute('onclick').includes("'"+lead.enrol_status+"'"));
+  });
+
+  // Pre-fill notes
+  document.getElementById('enrol-notes').value = lead.enrol_notes || '';
+
+  document.getElementById('enrol-modal-backdrop').classList.add('open');
+}
+
+function selectEnrolStatus(status, btn) {
+  _enrolSelectedStatus = status;
+  document.querySelectorAll('.enrol-option-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
+function closeEnrolModal() {
+  document.getElementById('enrol-modal-backdrop').classList.remove('open');
+  _enrolTs = null; _enrolSelectedStatus = null;
+}
+
+function saveEnrolStatus() {
+  if(!_enrolTs) return;
+  if(!_enrolSelectedStatus) { showToast('⚠️ Please select an enrollment status'); return; }
+
+  const leads = getLeads();
+  const idx = leads.findIndex(l => l.ts === _enrolTs);
+  if(idx === -1) return;
+
+  const notesVal = document.getElementById('enrol-notes').value.trim();
+
+  // Record as pending so auto-refresh doesn't wipe this change
+  recordPending(_enrolTs, {
+    enrol_status:  _enrolSelectedStatus,
+    enrol_notes:   notesVal,
+    enrol_updated: new Date().toISOString()
+  });
+
+  applyLocalMutation(ls => {
+    const i = ls.findIndex(x => x.ts === _enrolTs);
+    if(i !== -1) {
+      ls[i].enrol_status  = _enrolSelectedStatus;
+      ls[i].enrol_notes   = notesVal;
+      ls[i].enrol_updated = new Date().toISOString();
+    }
+  });
+
+  // Sync to Sheets
+  postToSheets({
+      action: 'updateEnrollment',
+      ts: _enrolTs,
+      email: leads[idx].email || '',
+      enrol_status: _enrolSelectedStatus,
+      enrol_notes: notesVal
+    });
+
+  showToast(`✅ ${leads[idx].fname} marked as ${_enrolSelectedStatus}`);
+  closeEnrolModal();
+
+  // Refresh whichever tab is active
+  const activeTab = document.querySelector('.dash-tab.active');
+  if(activeTab) {
+    const tabId = activeTab.id.replace('tab-','');
+    if(tabId === 'requests') renderRequests();
+    if(tabId === 'pipeline') renderPipeline();
+    if(tabId === 'overview') loadData();
+  }
+
+  // Update pipeline count
+  const pipeCount = leads.filter(l => l.enrol_status).length;
+  const pipeEl = document.getElementById('pipe-tab-count');
+  if(pipeEl) pipeEl.textContent = pipeCount;
+}
+
+function openPipeModal() {
+  // Clear all fields
+  ['pl-fname','pl-lname','pl-phone','pl-email','pl-nationality','pl-notes','pl-assigned'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  ['pl-relationship','pl-campus','pl-children','pl-enrol-status','pl-source','pl-translator'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.selectedIndex = 0;
+  });
+  document.getElementById('pipe-modal-backdrop').classList.add('open');
+  setTimeout(() => document.getElementById('pl-fname')?.focus(), 100);
+}
+
+function closePipeModal() {
+  document.getElementById('pipe-modal-backdrop').classList.remove('open');
+}
+
+function savePipelineLead() {
+  const fname  = document.getElementById('pl-fname')?.value.trim();
+  const phone  = document.getElementById('pl-phone')?.value.trim();
+  const campus = document.getElementById('pl-campus')?.value;
+  const enrol  = document.getElementById('pl-enrol-status')?.value;
+
+  if(!fname)  { showToast('⚠️ Please enter a first name');  document.getElementById('pl-fname')?.focus();  return; }
+  if(!phone)  { showToast('⚠️ Please enter a phone number'); document.getElementById('pl-phone')?.focus();  return; }
+  if(!campus) { showToast('⚠️ Please select a campus');      document.getElementById('pl-campus')?.focus(); return; }
+
+  const lead = {
+    fname,
+    lname:        document.getElementById('pl-lname')?.value.trim()        || '',
+    phone,
+    email:        document.getElementById('pl-email')?.value.trim()        || '',
+    nationality:  document.getElementById('pl-nationality')?.value.trim()  || '',
+    relationship: document.getElementById('pl-relationship')?.value        || '',
+    campus,
+    num_children: document.getElementById('pl-children')?.value            || '1',
+    translator:   document.getElementById('pl-translator')?.value          || 'No',
+    source:       document.getElementById('pl-source')?.value              || 'Walk-in (Open Day)',
+    assigned:     document.getElementById('pl-assigned')?.value.trim()     || '',
+    notes:        document.getElementById('pl-notes')?.value.trim()        || '',
+    enrol_status: enrol || 'Interested',
+    enrol_notes:  document.getElementById('pl-notes')?.value.trim()        || '',
+    status:       'Approved',        // manual pipeline leads are pre-approved
+    manual_entry: true,
+    pipeline_lead: true,             // flag so Sheets knows which tab to write to
+    ts:           new Date().toISOString()
+  };
+
+  // 1. Optimistic local update — record pending so it survives refresh
+  recordPending(lead.ts, {
+    enrol_status:  lead.enrol_status,
+    enrol_notes:   lead.notes,
+    pipeline_lead: true,
+    status:        'Approved'
+  });
+  applyLocalMutation(leads => leads.push(lead));
+
+  // 2. Save to Google Sheets — pipeline tab
+  postToSheets({
+      action:       'addPipelineLead',
+      fname:        lead.fname,
+      lname:        lead.lname,
+      nationality:  lead.nationality,
+      phone:        lead.phone,
+      email:        lead.email,
+      relationship: lead.relationship,
+      campus:       lead.campus,
+      num_children: lead.num_children,
+      translator:   lead.translator,
+      source:       lead.source,
+      enrol_status: lead.enrol_status,
+      notes:        lead.notes,
+      assigned:     lead.assigned,
+      ts:           lead.ts
+    });
+
+  showToast('✅ Lead added to pipeline & synced to Google Sheets!');
+  closePipeModal();
+
+  // Refresh pipeline tab
+  renderPipeline();
+
+  // Update counts
+  const pipeCount = getLeads().filter(l => l.enrol_status).length;
+  const pipeEl = document.getElementById('pipe-tab-count');
+  if(pipeEl) pipeEl.textContent = pipeCount;
+}
+
+function addToOverdue() {
+  var sel = document.getElementById('overdue-select-lead');
+  var ts  = sel ? sel.value : '';
+  if(!ts) { showToast('Please select a parent first'); return; }
+  var leads = getLeads();
+  var lead  = leads.find(function(l) { return l.ts === ts; });
+  if(!lead) return;
+  var overdue = getOverdueLeads();
+  if(overdue.find(function(o) { return o.ts === ts; })) { showToast('Already in overdue list'); return; }
+  var entry = Object.assign({}, lead, { overdue_added_at: new Date().toISOString(), overdue_notes:'', callback_sent:false, callback_sent_at:null });
+  overdue.push(entry);
+  saveOverdueLeads(overdue);
+  postToSheets({ action:'addOverdueLead', ts:lead.ts, fname:lead.fname||'', lname:lead.lname||'', nationality:lead.nationality||'', phone:lead.phone||'', email:lead.email||'', relationship:lead.relationship||'', campus:lead.campus||'', num_children:lead.num_children||'', translator:lead.translator||'', source:lead.source||'', overdue_added_at:entry.overdue_added_at, notes:'' }).catch(function(){});
+  var badge = document.getElementById('overdue-tab-count');
+  if(badge) badge.textContent = overdue.length;
+  showToast('Marked as no-show: ' + (lead.fname||'') + ' ' + (lead.lname||''));
+  renderOverdue();
+}
+
+function saveOverdueNote(ts) {
+  var el = document.getElementById('overdue-notes-' + safeId(ts));
+  var notes = el ? el.value : '';
+  var overdue = getOverdueLeads();
+  var idx = overdue.findIndex(function(o) { return o.ts === ts; });
+  if(idx !== -1) { overdue[idx].overdue_notes = notes; saveOverdueLeads(overdue); postToSheets({ action:'updateOverdueNote', ts:ts, notes:notes }).catch(function(){}); }
+}
+
+function removeFromOverdue(ts) {
+  if(!confirm('Remove from Overdue list?')) return;
+  var overdue = getOverdueLeads().filter(function(o) { return o.ts !== ts; });
+  saveOverdueLeads(overdue);
+  var badge = document.getElementById('overdue-tab-count');
+  if(badge) badge.textContent = overdue.length;
+  showToast('Removed from Overdue');
+  renderOverdue();
+}
+
+function markOverdueEnrolled(ts) {
+  var overdue = getOverdueLeads();
+  var lead    = overdue.find(function(o) { return o.ts === ts; });
+  if(!lead) return;
+  recordPending(ts, { enrol_status:'Enrolled' });
+  applyLocalMutation(function(leads) { var i = leads.findIndex(function(l){ return l.ts===ts; }); if(i!==-1) leads[i].enrol_status='Enrolled'; });
+  postToSheets({ action:'addPipelineLead', fname:lead.fname||'', lname:lead.lname||'', nationality:lead.nationality||'', phone:lead.phone||'', email:lead.email||'', relationship:lead.relationship||'', campus:lead.campus||'', num_children:lead.num_children||'', translator:lead.translator||'', source:lead.source||'', enrol_status:'Enrolled', notes:'Enrolled after Open Day follow-up', assigned:'', ts:lead.ts }).catch(function(){});
+  removeFromOverdue(ts);
+  showToast('Marked as Enrolled: ' + (lead.fname||''));
+}
+
+function openCallbackModal(ts) {
+  var overdue = getOverdueLeads();
+  var lead    = overdue.find(function(o) { return o.ts === ts; });
+  if(!lead) return;
+  _callbackTs = ts; _callbackLead = lead;
+  var name = (lead.fname||'') + ' ' + (lead.lname||'');
+  var sub  = document.getElementById('callback-modal-subtitle');
+  if(sub) sub.textContent = 'To: ' + name + ' - ' + (lead.email||'-');
+  var extra = document.getElementById('callback-extra-note');
+  if(extra) extra.value = '';
+  var prev = document.getElementById('callback-preview-text');
+  if(prev) prev.innerHTML = '<strong>Dear ' + name + ',</strong><br><br>We hope you and your family are well. We noticed that you were unable to join us for the <strong>PBIS Open Day on 8 July 2026</strong> at our Primary Campus - we completely understand that schedules can change.<br><br>We would love to still welcome your family to Panyathip British International School. If you are still interested in learning more about our programmes or arranging a private campus visit, please do not hesitate to reach out to us.<br><br>Our admissions team is always happy to arrange a personalised tour at a time that suits you best.<br><br><em style="color:var(--gold);">"Become the best you can be." - PBIS</em>';
+  var backdrop = document.getElementById('callback-modal-backdrop');
+  if(backdrop) { backdrop.classList.add('open'); backdrop.style.display='flex'; }
+}
+
+function closeCallbackModal() {
+  var backdrop = document.getElementById('callback-modal-backdrop');
+  if(backdrop) { backdrop.classList.remove('open'); backdrop.style.display=''; }
+  _callbackTs = null; _callbackLead = null;
+}
+
+function sendCallbackEmail() {
+  if(!_callbackTs || !_callbackLead) return;
+  var lead  = _callbackLead;
+  var extra = document.getElementById('callback-extra-note');
+  var note  = extra ? extra.value.trim() : '';
+  var contact = lead.campus==='EY' ? '+856 20 5728 0925' : lead.campus==='Secondary' ? '+856 20 5538 6672' : '+856 20 5538 6636';
+  postToSheets({ action:'sendCallbackEmail', email:lead.email||'', fname:lead.fname||'', lname:lead.lname||'', campus:lead.campus||'Primary', phone:lead.phone||'', contact:contact, extra_note:note, ts:_callbackTs }).then(function() {
+    var overdue = getOverdueLeads();
+    var idx = overdue.findIndex(function(o) { return o.ts === _callbackTs; });
+    if(idx !== -1) { overdue[idx].callback_sent = true; overdue[idx].callback_sent_at = new Date().toISOString(); saveOverdueLeads(overdue); }
+    showToast('Follow-up email sent to ' + (lead.email||'parent'));
+    closeCallbackModal();
+    renderOverdue();
+  });
+}
+
+function deleteLead(ts) {
+  if(!confirm('Remove this lead? This will also remove it from Google Sheets.')) return;
+  const lead = getLeads().find(l => l.ts === ts);
+
+  // Optimistic local update
+  applyLocalMutation(leads => {
+    const idx = leads.findIndex(l => l.ts === ts);
+    if(idx !== -1) leads.splice(idx, 1);
+  });
+
+  // Sync deletion to Google Sheets
+  postToSheets({
+    action: 'deleteLead',
+    ts: ts,
+    email: lead ? lead.email : ''
+  }).then(() => {
+    _leadsCache = null;
+  });
+
+  loadData();
+  showToast('🗑 Lead removed & synced to Sheets');
+}
+
+function openModal() {
+  document.getElementById('modal-backdrop').classList.add('open');
+  document.getElementById('m-fname').focus();
+}
+
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.remove('open');
+  // Clear all fields
+  ['m-fname','m-lname','m-nationality','m-phone','m-email','m-notes','m-assigned'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  ['m-relationship','m-campus','m-children','m-translator','m-source','m-status'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.selectedIndex = 0;
+  });
+}
+
+function handleBackdropClick(e) {
+  if(e.target === document.getElementById('modal-backdrop')) closeModal();
+}
+
+function saveManualLead() {
+  const fname = document.getElementById('m-fname').value.trim();
+  const phone = document.getElementById('m-phone').value.trim();
+  const campus = document.getElementById('m-campus').value;
+
+  if(!fname) { showToast('⚠️ Please enter a first name'); document.getElementById('m-fname').focus(); return; }
+  if(!phone) { showToast('⚠️ Please enter a phone number'); document.getElementById('m-phone').focus(); return; }
+  if(!campus) { showToast('⚠️ Please select an interested campus'); document.getElementById('m-campus').focus(); return; }
+
+  const lead = {
+    fname,
+    lname: document.getElementById('m-lname').value.trim(),
+    relationship: document.getElementById('m-relationship').value,
+    nationality: document.getElementById('m-nationality').value.trim(),
+    phone,
+    email: document.getElementById('m-email').value.trim(),
+    campus,
+    num_children: document.getElementById('m-children').value,
+    translator: document.getElementById('m-translator').value,
+    source: document.getElementById('m-source').value || 'Walk-in',
+    status: document.getElementById('m-status').value || 'New',
+    assigned: document.getElementById('m-assigned').value.trim(),
+    notes: document.getElementById('m-notes').value.trim(),
+    visit_date: document.getElementById('m-visit-date')?.value || '',
+    visit_time: document.getElementById('m-visit-time')?.value || '',
+    followup_date: document.getElementById('m-followup-date')?.value || '',
+    manual_entry: true,
+    ts: new Date().toISOString()
+  };
+
+  try {
+    applyLocalMutation(leads => leads.push(lead));
+    sendToSheets(lead);
+    pbisTrack('form_submit_success',{event_label:'Open Day Registration',event_category:'Registration Form',value:1}); showToast('✅ Lead saved & synced to Google Sheets!');
+    closeModal();
+    loadData();
+  } catch(err) {
+    showToast('❌ Error saving lead. Please try again.');
+  }
+}
+
+function renderSchedule() {
+  const container = document.getElementById('tab-content-schedule');
+  if(!container) return;
+
+  const leads = getLeads();
+  const events = buildCalendarEvents(leads);
+
+  // Sort all events chronologically
+  const allEvents = [];
+  Object.entries(events).forEach(([date, evs]) => {
+    evs.forEach(ev => allEvents.push({ date, ...ev }));
+  });
+  allEvents.sort((a,b) => a.date.localeCompare(b.date));
+
+  // Future events first (from today)
+  const todayStr = new Date().toISOString().slice(0,10);
+  const upcoming = allEvents.filter(e => e.date >= todayStr);
+  const past = allEvents.filter(e => e.date < todayStr);
+
+  const renderItems = (evs) => evs.map(ev => {
+    const d = new Date(ev.date + 'T12:00:00');
+    const dayNum = d.getDate();
+    const monStr = d.toLocaleDateString('en-GB',{month:'short'});
+    const l = ev.lead;
+    return `<div class="schedule-item">
+      <div class="sched-date-block">
+        <div class="sched-day">${dayNum}</div>
+        <div class="sched-mon">${monStr}</div>
+      </div>
+      <div class="sched-info">
+        <h4>${ev.label}</h4>
+        <p>${ev.sub}</p>
+        ${l ? `<p>📞 ${l.phone||'—'} &nbsp;·&nbsp; ${l.campus||'?'} Campus &nbsp;·&nbsp; ${l.num_children||'?'} child(ren)</p>` : ''}
+        <div class="sched-badges">
+          ${ev.type === 'openday' ? '<span class="badge" style="background:rgba(201,168,76,0.2);color:#8b6914;">Open Day</span>' : ''}
+          ${ev.type === 'registration' ? '<span class="badge badge-new">Registered</span>' : ''}
+          ${ev.type === 'visit' ? '<span class="badge badge-contacted">Campus Visit</span>' : ''}
+          ${ev.type === 'followup' ? '<span class="badge badge-sec">Follow-up</span>' : ''}
+          ${l && l.translator === 'Yes' ? '<span class="badge" style="background:rgba(45,158,95,0.1);color:#1a7a45;">🇱🇦 Translator</span>' : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-title">Upcoming Events <span>${upcoming.length} scheduled</span></div>
+      ${upcoming.length ? '<div class="schedule-list">' + renderItems(upcoming) + '</div>'
+        : '<div class="day-no-events" style="padding:24px;">No upcoming events yet</div>'}
+    </div>
+    ${past.length ? `<div class="panel">
+      <div class="panel-title">Past Events <span>${past.length} total</span></div>
+      <div class="schedule-list" style="opacity:0.6;">${renderItems(past)}</div>
+    </div>` : ''}
+  `;
+}
+
+function safeId(ts) { return ts ? ts.replace(/[^a-zA-Z0-9]/g, '') : ''; }
+
+function quickEnrolUpdate(ts, selectEl) {
+  const newStatus = selectEl.value;
+  const leads = getLeads();
+  const idx = leads.findIndex(l => l.ts === ts);
+  if(idx === -1) return;
+
+  // Record as pending so auto-refresh doesn't wipe this change
+  recordPending(ts, { enrol_status: newStatus, enrol_updated: new Date().toISOString() });
+
+  applyLocalMutation(ls => {
+    const i = ls.findIndex(x => x.ts === ts);
+    if(i !== -1) {
+      ls[i].enrol_status  = newStatus;
+      ls[i].enrol_updated = new Date().toISOString();
+    }
+  });
+
+  // Update select colour class
+  const clsMap = {
+    '':'es-none','Interested':'es-Interested','Toured':'es-Toured',
+    'Considering':'es-Considering','Enrolled':'es-Enrolled',
+    'Undecided':'es-Undecided','Not Enrolling':'es-notEnrolling'
+  };
+  selectEl.className = 'enrol-inline-select ' + (clsMap[newStatus]||'es-none');
+
+  // Flash "✓ Saved"
+  const flashId = 'enrol-flash-' + safeId(ts);
+  const flash = document.getElementById(flashId);
+  if(flash) { flash.style.display='block'; setTimeout(()=>{ flash.style.display='none'; }, 1500); }
+
+  // Sync to Google Sheets
+  postToSheets({
+      action: 'updateEnrollment',
+      ts: ts,
+      email: leads[idx].email || '',
+      enrol_status: newStatus,
+      enrol_notes: notesVal || ''
+    });
+
+  // Update pipeline tab count
+  const pipeCount = leads.filter(l => l.enrol_status).length;
+  const pipeEl = document.getElementById('pipe-tab-count');
+  if(pipeEl) pipeEl.textContent = pipeCount;
+}
+
+function filterReqTable(searchId, filterId, statusFId) {
+  const q = (document.getElementById(searchId)?.value||'').toLowerCase();
+  const campus = document.getElementById(filterId)?.value||'';
+  const status = document.getElementById(statusFId)?.value||'';
+  document.querySelectorAll('#req-tbody tr').forEach(row => {
+    const matchQ = !q || row.textContent.toLowerCase().includes(q);
+    const matchC = !campus || row.dataset.campus === campus;
+    const matchS = !status || row.dataset.status === status || (status==='Pending'&&(!row.dataset.status||row.dataset.status==='New'));
+    row.style.display = matchQ && matchC && matchS ? '' : 'none';
+  });
+}
+
+function getOverdueLeads() {
+  try { return JSON.parse(localStorage.getItem('pbis_overdue') || '[]'); }
+  catch(e) { return []; }
+}
+
+function saveOverdueLeads(leads) {
+  try { localStorage.setItem('pbis_overdue', JSON.stringify(leads)); }
+  catch(e) {}
+}
+
+function getLeads() {
+  const cache = _leadsCache;
+  if(cache !== null && (Date.now() - _lastFetch) < CACHE_TTL) {
+    return mergePending(cache);
+  }
+  // Stale — return merged localStorage backup while fetch is in progress
+  try {
+    const local = JSON.parse(localStorage.getItem('pbis_leads') || '[]');
+    return mergePending(local);
+  } catch(e) { return []; }
+}
+
+function applyLocalMutation(mutateFn, pendingKey, pendingChanges) {
+  // Get the current best data (merged)
+  const leads = getLeads();
+  mutateFn(leads);
+
+  // Update the raw cache too so next getLeads() returns the mutation
+  if(_leadsCache) {
+    mutateFn(_leadsCache);
+  } else {
+    _leadsCache = leads;
+  }
+  _lastFetch = Date.now();
+
+  // Record as pending so refresh doesn't wipe it
+  if(pendingKey && pendingChanges) {
+    recordPending(pendingKey, pendingChanges);
+  }
+
+  try { localStorage.setItem('pbis_leads', JSON.stringify(leads)); } catch(e) {}
+}
+
+function mergePending(leads) {
+  if(Object.keys(_pendingMutations).length === 0) return leads;
+  return leads.map(lead => {
+    const pending = _pendingMutations[lead.ts];
+    if(!pending) return lead;
+    return Object.assign({}, lead, pending);
+  });
+}
+
+function clearPending(ts) {
+  if(_pendingMutations[ts]) {
+    delete _pendingMutations[ts];
+    savePendingMutations();
+  }
+}
+
+function recordPending(ts, changes) {
+  if(!ts) return;
+  _pendingMutations[ts] = Object.assign(_pendingMutations[ts] || {}, changes);
+  savePendingMutations();
+}
+
+function savePendingMutations() {
+  try { localStorage.setItem('pbis_pending_mutations', JSON.stringify(_pendingMutations)); } catch(e) {}
+}
+
 </script>
 </body>
 </html>
